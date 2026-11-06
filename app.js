@@ -1,0 +1,45 @@
+const KEY="smartmate.v1";
+let db=load(), current="home", deferredInstall=null;
+function load(){try{return JSON.parse(localStorage.getItem(KEY))||{tasks:[],reminders:[],notes:[],office:[],documents:[]}}catch(e){return {tasks:[],reminders:[],notes:[],office:[],documents:[]}}}
+function save(){localStorage.setItem(KEY,JSON.stringify(db));render()}
+const $=id=>document.getElementById(id), esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dateLabel=d=>d?new Date(d+"T00:00:00").toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"}):"No date";
+function go(v){current=v;document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));document.querySelectorAll(".view").forEach(x=>x.classList.remove("active"));if(v!=="home")$("view-"+v)?.classList.add("active");document.querySelector(".hero").style.display=v==="home"?"block":"none";document.querySelector(".stats").style.display=v==="home"?"grid":"none";document.querySelector(".quick").style.display=v==="home"?"grid":"none";document.querySelectorAll(".app> .section-head,.app> .grid").forEach(x=>x.style.display=v==="home"?"":"none");render()}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.view));
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+document.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>openForm(b.dataset.add));
+$("today").textContent=new Date().toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+function item(title,sub="",actions=""){return `<div class="item"><div class="grow"><strong>${esc(title)}</strong>${sub?`<small>${esc(sub)}</small>`:""}</div>${actions}</div>`}
+function render(){
+$("taskCount").textContent=db.tasks.filter(x=>!x.done).length;$("remCount").textContent=db.reminders.length;$("officeCount").textContent=db.office.length;$("noteCount").textContent=db.notes.length;
+$("homeTasks").innerHTML=db.tasks.filter(x=>!x.done).slice(0,4).map(x=>item(x.title,x.due?dateLabel(x.due):x.priority||"Normal")).join("")||'<div class="empty">No open tasks. Enjoy the breathing room.</div>';
+$("homeReminders").innerHTML=db.reminders.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).slice(0,4).map(x=>item(x.title,dateLabel(x.date))).join("")||'<div class="empty">No reminders yet.</div>';
+let q=($("taskSearch")?.value||"").toLowerCase(), f=$("taskFilter")?.value||"all";
+$("taskList").innerHTML=db.tasks.filter(x=>(x.title+" "+x.details).toLowerCase().includes(q)&&(f==="all"||(f==="done"?x.done:!x.done))).map(x=>`<div class="item ${x.done?"done":""}"><input type="checkbox" ${x.done?"checked":""} data-done="${x.id}"><div class="grow"><strong>${esc(x.title)}</strong><small>${esc(x.priority||"Normal")} · ${dateLabel(x.due)}</small></div><button class="btn small" data-del="tasks" data-id="${x.id}">Delete</button></div>`).join("")||'<div class="empty">No matching tasks.</div>';
+$("reminderList").innerHTML=db.reminders.map(x=>`<div class="item"><div class="grow"><strong>${esc(x.title)}</strong><small>${dateLabel(x.date)} ${esc(x.time||"")} ${esc(x.details||"")}</small></div><button class="btn small" data-del="reminders" data-id="${x.id}">Delete</button></div>`).join("")||'<div class="empty">No reminders yet.</div>';
+let nq=($("noteSearch")?.value||"").toLowerCase();$("noteList").innerHTML=db.notes.filter(x=>(x.title+x.body).toLowerCase().includes(nq)).map(x=>`<div class="card"><div class="section-head"><b>${esc(x.title)}</b><button class="btn small" data-del="notes" data-id="${x.id}">Delete</button></div><div>${esc(x.body).replace(/\n/g,"<br>")}</div></div>`).join("")||'<div class="empty">No notes saved.</div>';
+let oq=($("officeSearch")?.value||"").toLowerCase();$("officeList").innerHTML=db.office.filter(x=>(x.title+x.caseNo+x.details).toLowerCase().includes(oq)).map(x=>`<div class="item"><div class="grow"><strong>${esc(x.title)}</strong><small>${esc(x.caseNo)} · ${dateLabel(x.due)} · ${esc(x.status)}</small></div><button class="btn small" data-del="office" data-id="${x.id}">Delete</button></div>`).join("")||'<div class="empty">No office items yet.</div>';
+$("documentList").innerHTML=db.documents.map(x=>item(x.name,x.type+" · "+(x.size/1024).toFixed(1)+" KB",`<button class="btn small" data-doc="${x.id}">Open</button><button class="btn small" data-del="documents" data-id="${x.id}">Delete</button>`)).join("")||'<div class="empty">No documents added.</div>';
+$("calendarList").innerHTML=[...db.reminders].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).map(x=>item(x.title,dateLabel(x.date)+" "+(x.time||""))).join("")||'<div class="empty">Your agenda is clear.</div>';
+}
+document.addEventListener("click",e=>{let d=e.target.closest("[data-del]");if(d){db[d.dataset.del]=db[d.dataset.del].filter(x=>x.id!==d.dataset.id);save()}let c=e.target.closest("[data-done]");if(c){let t=db.tasks.find(x=>x.id===c.dataset.done);if(t)t.done=c.checked;save()}let doc=e.target.closest("[data-doc]");if(doc){let x=db.documents.find(z=>z.id===doc.dataset.doc);if(x){let a=document.createElement("a");a.href=x.data;a.download=x.name;a.click()}}});
+["taskSearch","taskFilter","noteSearch","officeSearch"].forEach(id=>$(id)?.addEventListener("input",render));
+const fields={
+task:[["title","Task name","text",true],["due","Due date","date"],["priority","Priority","select",false,["Low","Normal","High"]],["details","Details","textarea"]],
+reminder:[["title","Reminder title","text",true],["date","Date","date",true],["time","Time","time"],["details","Details","textarea"]],
+note:[["title","Note title","text",true],["body","Write your note","textarea",true]],
+office:[["title","Work / subject","text",true],["caseNo","Case number / reference","text"],["due","Follow-up date","date"],["status","Status","select",false,["Pending","In progress","Completed"]],["details","Details","textarea"]],
+document:[["file","Choose a file","file",true]]
+};
+function openForm(type){$("modalTitle").textContent={task:"Add task",reminder:"Add reminder",note:"Quick note",office:"Add office work",document:"Add document"}[type];$("formFields").innerHTML=fields[type].map(([n,l,t,req,opts])=>`<div class="field"><label>${l}</label>${t==="textarea"?`<textarea name="${n}" ${req?"required":""}></textarea>`:t==="select"?`<select name="${n}">${opts.map(o=>`<option>${o}</option>`).join("")}</select>`:`<input name="${n}" type="${t}" ${req?"required":""}>`}</div>`).join("");$("modal").classList.add("open");$("entryForm").dataset.type=type}
+$("cancelBtn").onclick=()=>$("modal").classList.remove("open");$("modal").onclick=e=>{if(e.target===$("modal"))$("modal").classList.remove("open")};
+$("entryForm").onsubmit=async e=>{e.preventDefault();let type=e.currentTarget.dataset.type,fd=new FormData(e.currentTarget),x={id:crypto.randomUUID(),createdAt:new Date().toISOString()};for(let [k,v] of fd.entries())if(k!=="file")x[k]=v;
+if(type==="document"){let f=fd.get("file");if(f.size>3*1024*1024){alert("For this starter build, choose a file up to 3 MB.");return}x.name=f.name;x.type=f.type||"file";x.size=f.size;x.data=await new Promise((res,rej)=>{let r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(f)})}
+if(type==="task")x.done=false;db[type==="task"?"tasks":type==="reminder"?"reminders":type==="note"?"notes":type==="office"?"office":"documents"].unshift(x);$("modal").classList.remove("open");e.currentTarget.reset();save()};
+$("themeBtn").onclick=$("themeToggle").onclick=()=>{let t=document.documentElement.dataset.theme==="dark"?"light":"dark";document.documentElement.dataset.theme=t;localStorage.setItem("smartmate.theme",t)};
+if(localStorage.getItem("smartmate.theme")==="dark")document.documentElement.dataset.theme="dark";
+$("exportBtn").onclick=()=>{let blob=new Blob([JSON.stringify({app:"SmartMate",version:1,exportedAt:new Date().toISOString(),data:db},null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="SmartMate-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();URL.revokeObjectURL(a.href)};
+$("importFile").onchange=async e=>{try{let j=JSON.parse(await e.target.files[0].text());let d=j.data||j;if(!["tasks","reminders","notes","office","documents"].every(k=>Array.isArray(d[k])))throw Error();if(!confirm("Restore backup? This replaces current SmartMate data."))return;db=d;save();alert("Backup restored.")}catch(err){alert("This backup file is not valid SmartMate JSON.")}e.target.value=""};
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstall=e;$("installBtn").hidden=false});$("installBtn").onclick=async()=>{if(deferredInstall){deferredInstall.prompt();await deferredInstall.userChoice;deferredInstall=null;$("installBtn").hidden=true}};
+if("serviceWorker" in navigator && location.protocol.startsWith("http"))navigator.serviceWorker.register("./sw.js").catch(()=>{});
+render();
